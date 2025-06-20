@@ -77,6 +77,8 @@ try:
     # Também remove linhas onde a data ou valor estão vazios
     df_final = df_final.dropna(subset=["data_lanc", "valor"])
 
+    
+
 
     # === Inserção no banco ===
     with engine.connect() as conn:

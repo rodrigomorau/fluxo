@@ -47,25 +47,26 @@ def excluir_e_inserir(df, engine):
 
         if table_exists:
             query = """
-                SELECT REGEXP_REPLACE(nome_arquivo, '\.[^.]+$', '') AS nome_arquivo
+                SELECT ano_mes
                 FROM fluxo.itau
-                GROUP BY REGEXP_REPLACE(nome_arquivo, '\.[^.]+$', '');
+                GROUP BY ano_mes;
             """
             arquivos_importados = pd.read_sql(query, engine)
         else:
-            arquivos_importados = pd.DataFrame(columns=['nome_arquivo'])
+            arquivos_importados = pd.DataFrame(columns=['ano_mes'])
 
-    arquivos_para_atualizar = df[df['nome_arquivo'].isin(arquivos_importados['nome_arquivo'])]
+    # Aqui é o ajuste principal: comparar ano_mes com ano_mes
+    arquivos_para_atualizar = df[df['ano_mes'].isin(arquivos_importados['ano_mes'])]
 
     num_excluidos = 0
     if not arquivos_para_atualizar.empty:
         with engine.connect() as conn:
-            for arquivo in arquivos_para_atualizar['nome_arquivo'].unique():
+            for ano_mes in arquivos_para_atualizar['ano_mes'].unique():
                 delete_query = text("""
                     DELETE FROM fluxo.itau 
-                    WHERE REGEXP_REPLACE(nome_arquivo, '\.[^.]+$', '') = :arquivo
+                    WHERE ano_mes = :ano_mes
                 """)
-                result = conn.execute(delete_query, {"arquivo": arquivo})
+                result = conn.execute(delete_query, {"ano_mes": ano_mes})
                 conn.commit()
                 num_excluidos += result.rowcount
 
@@ -77,6 +78,7 @@ def excluir_e_inserir(df, engine):
     print(f"Arquivos processados: {df['nome_arquivo'].nunique()}")
     print(f"Linhas excluídas: {num_excluidos}")
     print(f"Linhas inseridas: {num_incluidos}")
+
 
 # ==================== 4. Início do processamento ====================
 arquivos = [f for f in os.listdir(folder_path) if f.endswith('.xls') or f.endswith('.xlsx')]
@@ -116,12 +118,16 @@ if df_list:
     df_combined = df_combined.sort_values(by='data_lanc')
     df_combined['data_carga'] = pd.to_datetime('today').normalize()
 
+    # Criação da coluna ano_mes com base nos 7 primeiros caracteres do nome do arquivo
+    df_combined['ano_mes'] = df_combined['nome_arquivo'].str[:7].str.replace(r'(\d{4})(\d{2})', r'\1-\2', regex=True)
+
     colunas_finais = [
         'data_lanc', 'lancamento', 'ag_origem', 'valor', 'saldos',
-        'idcategoria', 'observacao', 'nome_arquivo', 'data_carga'
+        'idcategoria', 'observacao', 'nome_arquivo', 'ano_mes', 'data_carga'
     ]
     df_filtrado = df_combined[colunas_finais]
 
     excluir_e_inserir(df_filtrado, engine)
 else:
     print("Nenhum arquivo válido foi processado.")
+
